@@ -35,7 +35,7 @@ import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Lib
 import Data.Generics
-import Data.List (intercalate, isPrefixOf, isSuffixOf)
+import Data.List (isPrefixOf, isSuffixOf)
 
 allExtensions :: Hs.ParseMode
 allExtensions = Hs.defaultParseMode{Hs.extensions = Hs.knownExtensions}
@@ -77,7 +77,7 @@ decsWithMode mode = qq $ \src -> fmap strip $ Hs.parseModuleWithMode mode src
         -- listing of decls (possibly with import istatements and other extras)
         -- is a valid module.
         strip :: Hs.Module -> [Hs.Decl]
-        strip (Hs.Module _ _ _ _ _ _ decs) = decs
+        strip (Hs.Module _ _ _ _ _ _ decls) = decls
 
 tyWithMode :: Hs.ParseMode -> QuasiQuoter
 tyWithMode = qq . Hs.parseTypeWithMode
@@ -90,10 +90,10 @@ qq parser = QuasiQuoter { quoteExp = parser `project` antiquoteExp
                         , quoteDec = error "Unimplemented."
 #endif
                         }
-
+project :: Monad m => (a -> Hs.ParseResult b) -> (b -> m c) -> a -> m c
 project f k s = case f s of
                   Hs.ParseOk x -> k x
-                  Hs.ParseFailed loc err -> fail err
+                  Hs.ParseFailed _ err -> fail err
 
 -- | The generic functions in 'Language.Haskell.TH.Quote' don't use global
 -- names for syntax constructors. This has the unfortunate effect of breaking
