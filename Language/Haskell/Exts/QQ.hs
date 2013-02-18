@@ -26,8 +26,8 @@
 --
 -- In a pattern context, antiquotations use the same syntax.
 
-module Language.Haskell.Exts.QQ (hs, dec, decs, ty,
-    hsWithMode, decWithMode, decsWithMode, tyWithMode) where
+module Language.Haskell.Exts.QQ (hs, pat,dec, decs, ty,
+    hsWithMode, patWithMode, decWithMode, decsWithMode, tyWithMode) where
 
 import qualified Language.Haskell.Exts as Hs
 import qualified Language.Haskell.Meta.Syntax.Translate as Hs
@@ -50,6 +50,10 @@ hs = hsWithMode allExtensions
 ty :: QuasiQuoter
 ty = tyWithMode allExtensions
 
+-- | A quasiquoter for a pattern
+pat :: QuasiQuoter
+pat = patWithMode allExtensions
+
 -- | A quasiquoter for a single top-level declaration.
 dec :: QuasiQuoter
 dec = decWithMode allExtensions
@@ -66,6 +70,9 @@ decs = decsWithMode allExtensions
 -- > decs = decsWithMode mode
 hsWithMode :: Hs.ParseMode -> QuasiQuoter
 hsWithMode = qq . Hs.parseExpWithMode
+
+patWithMode :: Hs.ParseMode -> QuasiQuoter
+patWithMode = qq. Hs.parsePatWithMode
 
 decWithMode :: Hs.ParseMode -> QuasiQuoter
 decWithMode = qq . Hs.parseDeclWithMode
@@ -84,7 +91,7 @@ tyWithMode = qq . Hs.parseTypeWithMode
 
 qq :: Data a => (String -> Hs.ParseResult a) -> QuasiQuoter
 qq parser = QuasiQuoter { quoteExp = parser `project` antiquoteExp
-                        , quotePat = Hs.parsePat `project` antiquotePat
+                        , quotePat = parser `project` antiquotePat
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 613
                         , quoteType = error "Unimplemented."
                         , quoteDec = error "Unimplemented."
@@ -124,22 +131,37 @@ qualify n | ":" <- nameBase n = '(:)
 
 antiquoteExp :: Data a => a -> Q Exp
 antiquoteExp t = dataToQa (conE . qualify) litE (foldl appE)
-                 (const Nothing `extQ` antiE `extQ` antiP `extQ` antiN `extQ` antiT) t
-    where antiE (Hs.SpliceExp (Hs.IdSplice v)) = Just $ varE $ mkName v
-          antiE (Hs.SpliceExp (Hs.ParenSplice e)) = Just $ return $ Hs.toExp e
+        (antiQuote `extQ` antiE `extQ` antiN) t
+    where antiE (Hs.SpliceExp (Hs.ParenSplice e)) = Just $ return $ Hs.toExp e
           antiE _ = Nothing
-          antiP (Hs.PParen (Hs.PParen (Hs.PVar (Hs.Ident n)))) =
-              Just $ appE [| Hs.PVar |] (varE (mkName n))
-          antiP _ = Nothing
-          antiT (Hs.TyParen (Hs.TyParen (Hs.TyVar (Hs.Ident n)))) = Just . varE $ mkName n
-          antiT _ = Nothing
           antiN (Hs.Ident n) | "__" `isPrefixOf` n, "__" `isSuffixOf` n  =
             let nn = take (length n - 4) (drop 2 n)
-            in Just $ appE [| Hs.Ident |] (varE (mkName nn))
+            in Just $ con 'Hs.Ident [var (mkName nn)]
           antiN _ = Nothing
 
-antiquotePat :: Data a => a -> Q Pat
-antiquotePat = dataToQa qualify litP conP (const Nothing `extQ` antiP)
-    where antiP (Hs.PParen (Hs.PParen (Hs.PVar (Hs.Ident n)))) =
-              Just $ conP 'Hs.PVar [varP (mkName n)]
+class Quotable q where
+    var :: Name -> Q q
+    con :: Name -> [Q q] -> Q q
+
+instance Quotable Exp where
+    var = varE
+    con n = foldl appE (conE n)
+
+instance Quotable Pat where
+    var = varP
+    con = conP
+
+-- Antiquoter for both pattern and expression quasiquoters.
+antiQuote :: (Data a, Quotable q) => a -> Maybe (Q q)
+antiQuote = const Nothing `extQ` antiE `extQ` antiP `extQ`  antiT
+    where antiE (Hs.SpliceExp (Hs.IdSplice v)) = Just $ var $ mkName v
+          -- ParenSplices can't be antiquoted here as they contain expressions.
+          antiE _ = Nothing
+          antiP (Hs.PParen (Hs.PParen (Hs.PVar (Hs.Ident n)))) =
+              Just $ con 'Hs.PVar [var (mkName n)]
           antiP _ = Nothing
+          antiT (Hs.TyParen (Hs.TyParen (Hs.TyVar (Hs.Ident n)))) = Just . var $ mkName n
+          antiT _ = Nothing
+
+antiquotePat :: Data a => a -> Q Pat
+antiquotePat = dataToQa qualify litP conP antiQuote
