@@ -50,4 +50,6 @@ library
   Default-Language:     Haskell2010
   Default-Extensions:   TemplateHaskell, CPP
   Exposed-Modules:      Language.Haskell.Exts.QQ
+                        Language.Haskell.Exts.QQAntiquoters
+                        Language.Haskell.Exts.QQBase
   ghc-options:          -Wall
