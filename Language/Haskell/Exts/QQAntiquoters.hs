@@ -50,11 +50,11 @@ doubleTParen _ = Nothing
 -- `doubleTParen` in addition to `idSplice`.
 defaultPatAntiquoter :: GenAntiquoter
 defaultPatAntiquoter = basicAntiquoter
-    `extQ` doublePParen
-    `extQ` doubleTParen
+    `antiL` doublePParen
+    `antiL` doubleTParen
 -- | The default expression context antiquoter, this extends the
 -- `defaultPatAntiquoter` with `underscored` and `parenSplice`.
 defaultExpAntiquoter :: ExpAntiquoter
 defaultExpAntiquoter = defaultPatAntiquoter
-    `extQ` underscored
-    `extQ` parenSplice
+    `antiL` underscored
+    `antiL` parenSplice

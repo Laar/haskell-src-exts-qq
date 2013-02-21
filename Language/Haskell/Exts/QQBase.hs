@@ -32,16 +32,17 @@ module Language.Haskell.Exts.QQBase (
     Antiquoter, GenAntiquoter, ExpAntiquoter, PatAntiquoter,
     -- ** Basis antiquoters
     noAntiquoter, basicAntiquoter, idSplice,
-    
+    -- ** antiquoter combinators    
+    antiL, antiR,
     -- * Utilities
     allExtensions,
-    extQ,
 ) where
 
 import qualified Language.Haskell.Exts as Hs
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Lib
+import Control.Monad
 import Data.Generics
 
 type GenericQuasiQuoter = ExpAntiquoter -> PatAntiquoter -> Hs.ParseMode
@@ -141,7 +142,7 @@ qualify n = n
 type AntiquoterPass  q e =                         e -> Maybe (Q q)
 -- | A generalized version of `AntiquoterPass` where the input can be any `Data`
 -- instance. Multiple `AntiquoterPass`es can be combined into an `Antiquoter` by
--- using `extQ` (reexported for convenience), using `noAntiquoter` as basis.
+-- using `antiL` and `antiR` using `noAntiquoter` like a neutral element.
 type Antiquoter      q   = forall e. Data e     => AntiquoterPass q   e
 -- | A generalization of `AntiquoterPass` where the output could be any
 -- instance of the `Quotable` class. This represents an antiquotation pass that
@@ -165,7 +166,17 @@ noAntiquoter = const Nothing
 
 -- | The basic antiquoter which only antiquotes `IdSplice`s.
 basicAntiquoter :: GenAntiquoter
-basicAntiquoter = noAntiquoter `extQ` idSplice
+basicAntiquoter = noAntiquoter `antiL` idSplice
+
+-- | Extend an `AntiQuoter` by an `AntiQuoterPass` prefering the Antiquoter on
+-- the left side (when using in infix notation).
+antiL :: Typeable e => Antiquoter q -> AntiquoterPass q e -> Antiquoter q
+antiL f g a = f a `mplus` mkQ mzero g a
+
+-- | Extend an `AntiQuoter` by an `AntiQuoterPass` prefering the AntiquoterPass
+-- on the right side (when using in infix notation).
+antiR :: Typeable e => Antiquoter q -> AntiquoterPass q e -> Antiquoter q
+antiR f g a = mkQ mzero g a `mplus` f a
 
 -- | An AntiquoterPass that antiquotes `IdSplice`s (those of the form @ $a @).
 idSplice :: GenAntiquoterPass Hs.Exp
