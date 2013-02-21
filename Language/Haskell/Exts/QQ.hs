@@ -34,7 +34,9 @@ import qualified Language.Haskell.Meta.Syntax.Translate as Hs
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Lib
-import Data.Generics
+import Control.Applicative
+import Control.Monad
+import Data.Generics hiding (empty)
 import Data.List (isPrefixOf, isSuffixOf)
 
 allExtensions :: Hs.ParseMode
@@ -137,7 +139,7 @@ qualify n = n
 
 antiquoteExp :: Data a => a -> Q Exp
 antiquoteExp t = dataToQa (conE . qualify) litE (foldl appE)
-        (antiQuote `extQ` antiE `extQ` antiN) t
+        (antiQuote `extQA` antiE `extQA` antiN) t
     where antiE (Hs.SpliceExp (Hs.ParenSplice e)) = Just $ return $ Hs.toExp e
           antiE _ = Nothing
           antiN (Hs.Ident n) | "__" `isPrefixOf` n, "__" `isSuffixOf` n  =
@@ -156,6 +158,15 @@ instance Quotable Exp where
 instance Quotable Pat where
     var = varP
     con = conP
+
+-- | Extra combinator for generics, it combines the result of the specific case
+-- (or `empty` if not applicable) with the result from the general case.
+--
+-- This extra operation is needed to combine antiquotation rules. If `extQ` was
+-- used only one of the rules would be applied.
+extQA :: (Alternative f, Typeable a, Typeable b)
+    => (a -> f r) -> (b -> f r) -> (a -> f r)
+extQA f g a = mkQ empty g a <|> f a
 
 -- Antiquoter for both pattern and expression quasiquoters.
 antiQuote :: (Data a, Quotable q) => a -> Maybe (Q q)
