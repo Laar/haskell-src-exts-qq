@@ -50,3 +50,13 @@ library
   Default-Language:     Haskell2010
   Default-Extensions:   TemplateHaskell, CPP
   Exposed-Modules:      Language.Haskell.Exts.QQ
+
+Test-Suite test
+  Default-language: Haskell2010
+  Type:             exitcode-stdio-1.0
+  Hs-source-dirs:   tests
+  Main-is:          Main.hs
+  Build-depends:    base >= 4 && < 5,
+                    haskell-src-exts-qq,
+                    haskell-src-exts,
+                    tasty >= 0.8, tasty-hunit
