@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Main (main) where
 
-import Language.Haskell.Exts
+import Language.Haskell.Exts as Hs
 import Language.Haskell.Exts.QQ
 
 import Test.Tasty
@@ -10,6 +10,7 @@ import Test.Tasty.HUnit
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
     [ testGroup "Simple tests" simpleTests
+    , testGroup "Anti quoting tests" antiquotingTests
     ]
 
 
@@ -36,4 +37,51 @@ one = 1|] of
                 Nothing (UnGuardedRhs (Lit (Int 1))) (BDecls [])
                 ] -> True
             _ -> False
+    ]
+
+antiquotingTests :: [TestTree]
+antiquotingTests =
+    [ testCase "Double bracket pattern" . assert $
+        let x = Ident "pat" 
+            quote =  [hs| \((x)) -> 1|]
+        in case quote of
+            Lambda _ [PVar (Ident "pat")] (Lit (Int 1)) 
+                -> True
+            _   -> False
+    , testCase "Paren splice" . assert $
+        let x = Ident "exp"
+            quote = [hs| $(Hs.Var (Hs.UnQual x)) |]
+        in case quote of
+            Var (UnQual (Ident "exp"))
+                -> True
+            _   -> False
+    , testCase "IdSplice" . assert $
+        let x = Var . UnQual . Ident $ "exp"
+            quote = [hs| $x |]
+        in case quote of
+            Var (UnQual (Ident "exp"))
+                -> True
+            _   -> False
+    , testCase "Double underscore" . assert $
+        let f = "name"
+            quote = [hs| let __f__ = 1 in __f__ |]
+        in case quote of
+            Let (BDecls 
+                    -- The pattern binding
+                    [PatBind _ (PVar (Ident "name")) 
+                        Nothing (UnGuardedRhs (Lit (Int 1))) (BDecls [])])
+                    -- the in part
+                    (Var (UnQual (Ident "name")))
+                -> True
+            _   -> False
+    , testCase "Combined antiquoting" . assert $
+        let x = "x"
+            y = Ident "y"
+            z = Var . UnQual . Ident $ "z"
+            quote = [hs| __x__ $(Var . UnQual $ y) $z|]
+        in case quote of
+            App (App (Var (UnQual (Ident "x")))  (Var (UnQual (Ident "y")))) 
+                    (Var (UnQual (Ident "z")))
+                -> True
+            _   -> False
     ]
